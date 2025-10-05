@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net/http"
 )
 
 type ChirpErrorResponse struct {
@@ -18,4 +19,11 @@ func generateErrorResp(s string) []byte {
 		log.Fatalf("Error marshalling JSON: %s", err)
 	}
 	return dat
+}
+
+func respondError(w http.ResponseWriter, message string, errorCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(errorCode)
+	dat := generateErrorResp(message)
+	w.Write(dat)
 }
