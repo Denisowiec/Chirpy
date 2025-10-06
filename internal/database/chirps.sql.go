@@ -16,8 +16,8 @@ INSERT INTO chirps (created_at, updated_at, body, user_id) VALUES (NOW(), NOW(),
 `
 
 type CreateChirpParams struct {
-	Body   string
-	UserID uuid.UUID
+	Body   string    `json:"body"`
+	UserID uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) CreateChirp(ctx context.Context, arg CreateChirpParams) (Chirp, error) {
@@ -88,8 +88,8 @@ SELECT id, created_at, updated_at, body, user_id FROM chirps WHERE user_id = $1 
 `
 
 type GetChirpsForUserParams struct {
-	UserID uuid.UUID
-	Limit  int32
+	UserID uuid.UUID `json:"user_id"`
+	Limit  int32     `json:"limit"`
 }
 
 func (q *Queries) GetChirpsForUser(ctx context.Context, arg GetChirpsForUserParams) ([]Chirp, error) {
