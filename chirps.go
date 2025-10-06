@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Denisowiec/Chirpy/internal/auth"
 	"github.com/Denisowiec/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -47,6 +48,19 @@ func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// User authentification
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error extracting jwt from header: %s", err)
+		respondError(w, "Authentification failed", http.StatusUnauthorized)
+		return
+	}
+	inUID, err := auth.ValidateJWT(token, cfg.jwtSecretCode)
+	if err != nil {
+		respondError(w, "Authentification failed", http.StatusUnauthorized)
+		return
+	}
+
 	// Testing if the chirp is too long
 	if len(chirpInput.Body) == 0 {
 		respondError(w, "Chirp malformed", http.StatusBadRequest)
@@ -61,7 +75,7 @@ func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
 
 		ccparams := database.CreateChirpParams{
 			Body:   chirpInput.Body,
-			UserID: chirpInput.UserID,
+			UserID: inUID,
 		}
 
 		chirp, err := cfg.db.CreateChirp(r.Context(), ccparams)
@@ -103,7 +117,7 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	reqId, err := uuid.Parse(r.PathValue("chirpid"))
 	if err != nil {
-		log.Printf("Error %v parsing chirp id: %s", err)
+		log.Printf("Error parsing chirp id: %s", err)
 		respondError(w, "Error processing request", http.StatusInternalServerError)
 		return
 	}

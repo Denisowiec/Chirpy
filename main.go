@@ -16,6 +16,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             database.Queries
+	jwtSecretCode  string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -36,13 +37,17 @@ func main() {
 	mux := http.NewServeMux()
 	apiCfg := apiConfig{}
 	apiCfg.db = *dbQueries
+	apiCfg.jwtSecretCode = os.Getenv("JWT_SECRET_CODE")
 
 	// api handlers
+	// chirp-related
 	mux.HandleFunc("GET /api/healthz", handlerReady)
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerPostChirp)         // post a chirp
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)          // get all chirps
 	mux.HandleFunc("GET /api/chirps/{chirpid}", apiCfg.handlerGetChirp) // get a single chirp
+	// user-related
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+	mux.HandleFunc("POST /api/login", apiCfg.handleLogin)
 
 	// admin handlers
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerHits)
