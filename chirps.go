@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/Denisowiec/Chirpy/internal/auth"
@@ -96,11 +97,38 @@ func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.db.GetChirps(r.Context())
-	if err != nil {
-		log.Printf("Error getting chirps from the database: %s", err)
-		respondError(w, "Something went wrong", http.StatusInternalServerError)
-		return
+	authorID := r.URL.Query().Get("author_id")
+	sortDir := r.URL.Query().Get("sort")
+	if sortDir != "desc" {
+		sortDir = "asc"
+	}
+	var chirps []database.Chirp
+	if authorID != "" {
+		// If this parameter is given, we only return the chirps of the given user
+		uid, err := uuid.Parse(authorID)
+		if err != nil {
+			respondError(w, "Error parsing author_id", http.StatusBadRequest)
+			return
+		}
+
+		chirps, err = cfg.db.GetChirpsForUser(r.Context(), uid)
+
+		if err != nil {
+			respondError(w, "Error fetching chirps for user", http.StatusNotFound)
+			return
+		}
+	} else {
+		// if author_id isn't given, we return all chirps
+		var err error
+		chirps, err = cfg.db.GetChirps(r.Context())
+		if err != nil {
+			log.Printf("Error getting chirps from the database: %s", err)
+			respondError(w, "Something went wrong", http.StatusInternalServerError)
+			return
+		}
+	}
+	if sortDir == "desc" {
+		sort.Slice(chirps, func(i, j int) bool { return chirps[i].CreatedAt.After(chirps[j].CreatedAt) })
 	}
 
 	dat, err := json.Marshal(chirps)
