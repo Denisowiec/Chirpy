@@ -9,3 +9,6 @@ SELECT * FROM chirps WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2;
 
 -- name: GetChirps :many
 SELECT * FROM chirps ORDER BY created_at ASC;
+
+-- name: DeleteChirp :one
+DELETE FROM chirps WHERE id = $1 AND user_id = $2 RETURNING *;

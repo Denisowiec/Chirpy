@@ -11,11 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type chirpMinimal struct {
-	Body   string    `json:"body"`
-	UserID uuid.UUID `json:"user_id"`
-}
-
 func replaceProfane(s string) string {
 	grawlix := "****"
 	profanities := []string{
@@ -36,6 +31,10 @@ func replaceProfane(s string) string {
 }
 
 func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
+	type chirpMinimal struct {
+		Body   string    `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+	}
 	decoder := json.NewDecoder(r.Body)
 	chirpInput := chirpMinimal{}
 
@@ -139,4 +138,50 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(dat)
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	// User authentification
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error extracting jwt from header: %s", err)
+		respondError(w, "Authentification failed", http.StatusUnauthorized)
+		return
+	}
+	inUID, err := auth.ValidateJWT(token, cfg.jwtSecretCode)
+	if err != nil {
+		respondError(w, "Authentification failed", http.StatusUnauthorized)
+		return
+	}
+
+	reqId, err := uuid.Parse(r.PathValue("chirpid"))
+	if err != nil {
+		log.Printf("Error parsing chirp id: %s", err)
+		respondError(w, "Error processing request", http.StatusInternalServerError)
+		return
+	}
+
+	chirp, err := cfg.db.GetChirpById(r.Context(), reqId)
+	if err != nil {
+		respondError(w, "Chirp not found", http.StatusNotFound)
+		return
+	}
+	if chirp.UserID != inUID {
+		respondError(w, "Operation unauthorized", http.StatusForbidden)
+		return
+	}
+
+	delChirpParams := database.DeleteChirpParams{
+		ID:     reqId,
+		UserID: inUID,
+	}
+	_, err = cfg.db.DeleteChirp(r.Context(), delChirpParams)
+	if err != nil {
+		log.Printf("Error deleting chirp: %s", err)
+		respondError(w, "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
 }

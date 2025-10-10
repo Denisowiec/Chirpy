@@ -17,6 +17,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             database.Queries
 	jwtSecretCode  string
+	polkaApiKey    string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -38,13 +39,15 @@ func main() {
 	apiCfg := apiConfig{}
 	apiCfg.db = *dbQueries
 	apiCfg.jwtSecretCode = os.Getenv("JWT_SECRET_CODE")
+	apiCfg.polkaApiKey = os.Getenv("POLKA_KEY")
 
 	// api handlers
 	// chirp-related
 	mux.HandleFunc("GET /api/healthz", handlerReady)
-	mux.HandleFunc("POST /api/chirps", apiCfg.handlerPostChirp)         // post a chirp
-	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)          // get all chirps
-	mux.HandleFunc("GET /api/chirps/{chirpid}", apiCfg.handlerGetChirp) // get a single chirp
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerPostChirp)               // post a chirp
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)                // get all chirps
+	mux.HandleFunc("GET /api/chirps/{chirpid}", apiCfg.handlerGetChirp)       // get a single chirp
+	mux.HandleFunc("DELETE /api/chirps/{chirpid}", apiCfg.handlerDeleteChirp) // delete a chirp
 	// user-related
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 	mux.HandleFunc("POST /api/login", apiCfg.handleLogin)
@@ -55,6 +58,9 @@ func main() {
 	// admin handlers
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerHits)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
+
+	// webhooks
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handleMakeUserRed)
 
 	// filesystem handler
 	fsHandler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))

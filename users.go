@@ -16,6 +16,14 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
+
+	type createUserResponse struct {
+		ID        uuid.UUID `json:"id"`
+		Email     string    `json:"email"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		IsUserRed bool      `json:"is_chirpy_red"`
+	}
 	decoder := json.NewDecoder(r.Body)
 	reqBody := createUserRequest{}
 
@@ -53,10 +61,16 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 
 	w.WriteHeader(http.StatusCreated) // Code 201
 
-	// We sent back the user's info, but withouot the password hash
-	user.HashedPassword = ""
+	// We send back the user's info, but withouot the password hash
+	resp := createUserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		IsUserRed: user.IsChirpyRed,
+	}
 
-	dat, err := json.Marshal(user)
+	dat, err := json.Marshal(resp)
 	if err != nil {
 		log.Printf("Error marshalling json: %s", err)
 		w.Write([]byte{})
@@ -77,6 +91,7 @@ func (cfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		Email     string    `json:"email"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
+		IsUserRed bool      `json:"is_chirpy_red"`
 	}
 
 	token, err := auth.GetBearerToken(r.Header)
@@ -125,6 +140,7 @@ func (cfg *apiConfig) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
+		IsUserRed: user.IsChirpyRed,
 	}
 
 	dat, err := json.Marshal(respBody)
@@ -148,6 +164,7 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt     time.Time `json:"created_at"`
 		UpdatedAt     time.Time `json:"updated_at"`
 		Email         string    `json:"email"`
+		IsUserRed     bool      `json:"is_chirpy_red"`
 		Token         string    `json:"token"`
 		Refresh_token string    `json:"refresh_token"`
 	}
@@ -218,6 +235,7 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:     user.CreatedAt,
 		UpdatedAt:     user.UpdatedAt,
 		Email:         user.Email,
+		IsUserRed:     user.IsChirpyRed,
 		Token:         token,
 		Refresh_token: refToken,
 	}
@@ -308,5 +326,44 @@ func (cfg *apiConfig) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) handleMakeUserRed(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"data"`
+	}
+
+	// Apikey authorization
+	key := auth.GetAPIKey(r.Header)
+	if key != cfg.polkaApiKey {
+		log.Println("Error, polka authorization failed.")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	req := reqBody{}
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&req); err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// We only care about the user.upgraded event. Anything else will be ignored.
+	if req.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	_, err := cfg.db.MakeUserRed(r.Context(), req.Data.UserID)
+	if err != nil {
+		log.Printf("unable to modify user data: %s", err)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
